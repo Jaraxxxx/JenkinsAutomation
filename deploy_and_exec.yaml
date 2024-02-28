@@ -1,0 +1,76 @@
+---
+- name: Create Kubernetes Deployment and Service, and exec commands in pods
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Install Kubernetes Python Library
+      pip:
+        name: kubernetes
+        state: present
+
+    - name: Install apt-transport-https package
+      apt:
+        name: apt-transport-https
+        state: present
+
+    - name: Add Kubernetes apt repository key
+      apt_key:
+        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+        state: present
+
+    - name: Add Kubernetes apt repository
+      apt_repository:
+        repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
+        state: present
+        filename: kubernetes
+
+    - name: Install kubectl
+      apt:
+        name: kubectl
+        state: present
+
+    - name: Create Deployment
+      k8s:
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: calculator-deployment
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: calculator
+            template:
+              metadata:
+                labels:
+                  app: calculator
+              spec:
+                containers:
+                - name: calculator
+                  image: jaraxxx/calculator:latest
+                  ports:
+                  - containerPort: 80
+
+    - name: Create Service
+      k8s:
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: calculator-service
+          spec:
+            selector:
+              app: calculator
+            ports:
+            - protocol: TCP
+              port: 80
+              targetPort: 80
+            type: LoadBalancer
+
+    - name: Get Pod Name
+      shell: kubectl get pods -l app=calculator -o=jsonpath='{.items[0].metadata.name}'
+      register: pod_name
+
+    - name: Exec commands in Pod
+      command: kubectl exec -it {{ pod_name.stdout }} -- /bin/bash -c "cd /build && ./Calculator_test & ./Calculator"
